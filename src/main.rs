@@ -2,12 +2,13 @@ extern crate term;
 
 use::std::env;
 
+//TODO: make BOARD_LENGTH dynamic
 const BOARD_LENGTH: usize = 25;
 
 #[derive(Debug, Clone)]
 /// Defines the board/tape on which the busy beaver game will unfold
-/// The board in theory should be of inifinte length, but that is far
-/// longer than what we need - phew. We set it to BOARD_LENGTH istead!
+/// The board in theory can be of inifinte length. In the real world
+/// we are limited by RAM.
 struct Board(Vec<u8>);
 
 #[derive(Debug, Clone, Copy)]
