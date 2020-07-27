@@ -1,12 +1,12 @@
 extern crate term;
 
-const BOARD_LENGTH: usize = 100;
+const BOARD_LENGTH: usize = 25;
 
-//#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// Defines the board/tape on which the busy beaver game will unfold
 /// The board in theory should be of inifinte length, but that is far
 /// longer than what we need - phew. We set it to BOARD_LENGTH istead!
-struct Board([u8; BOARD_LENGTH]);
+struct Board(Vec<u8>);
 
 #[derive(Debug, Clone, Copy)]
 /// Directions the 'typewriter' (tw) can move.
@@ -29,7 +29,7 @@ enum State {
     Halt,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// Defines a card holding instructions.
 struct Cards(Vec<Card>);
 
@@ -57,6 +57,16 @@ struct Typewriter {
 
 /// Holds all the generated machines
 struct Machines(Vec<Cards>);
+
+#[derive(Debug)]
+/// Keep track of stats during a run of busy beaver
+struct Stats {
+    cards: Cards,
+    score: usize,
+    action: usize,
+    boards: Vec<Board>,
+    head_positions: Vec<usize>,
+}
 
 impl Instructions {
     pub fn new(write: Symbol, direction: Direction, state: State) -> Self {
@@ -133,8 +143,6 @@ impl Typewriter {
 
 impl Machines {
     pub fn generate(num_cards: usize) -> Self {
-        let mut machines: Vec<Cards> = Vec::new();
-
         // construct every possible set of instructions
         let inst1 = Self::generate_instructions(num_cards);
         let inst2 = inst1.clone();
@@ -148,10 +156,8 @@ impl Machines {
             }
         }
 
-        // constructs all possible machines
+        // constructs all possible machines that contains the halt state
         let machines = Self::generate_all_possible_machines(cards, num_cards);
-
-        println!("number of machines: {:?}", machines.len());
 
         Self(machines)
     }
@@ -183,7 +189,8 @@ impl Machines {
                                       num_cards: usize) -> Vec<Cards> {
         let mut res: Vec<Cards> = Vec::new();
         let mut card_holder: Vec<Card> = Vec::new();
-        Self::combine_cards(&cards, num_cards-1, 0, 0, &mut card_holder, &mut res);
+        Self::combine_cards(&cards, num_cards-1, 0, 0,
+                            &mut card_holder, &mut res);
         res
     }
 
@@ -198,12 +205,11 @@ impl Machines {
         for i in 0..num_cards {
             states.push(State::Card(i));
         } 
-//
+
         let mut res = Vec::new();
         for s in states.iter() {
             for d in dir.iter() {
                 for sy in sym.iter() {
-                    println!("{:?} {:?} {:?}", sy, d, s);
                     res.push(Instructions::new(*sy, *d, *s));
                 }
             }
@@ -212,70 +218,110 @@ impl Machines {
     }
 }
 
-fn show_current_state(board: &Board, tw: &Typewriter) {
-    let mut terminal = term::stdout().unwrap();
-    for (c,x) in board.0.iter().enumerate() {
-        if c == tw.head {
-            terminal.fg(term::color::RED).unwrap();
-            print!("{} ",x);
-            terminal.reset().unwrap();
-        } else {
-            if *x as usize == 1 {
-                terminal.fg(term::color::BRIGHT_BLUE).unwrap();
-                terminal.attr(term::Attr::Bold).unwrap();
-                print!("{} ", x);
-                terminal.reset().unwrap();
-            } else {
-                print!("{} ", x);
-            }
-        }
+impl Stats {
+    pub fn init(cards: Cards) -> Self {
+        Self { cards, action: 0, score: 0,
+               boards: vec![], head_positions: vec![] }
     }
-    print!("\n");
+
+    pub fn update(&mut self, board: &Board, tw: &Typewriter) {
+        self.score = board.0.iter().filter(|x| **x == 1)
+                            .collect::<Vec<&u8>>().len();
+        self.boards.push(board.clone());
+        self.action = self.boards.len()-1;
+        self.head_positions.push(tw.head);
+    }
+
+    pub fn show_state(&self) {
+        let mut terminal = term::stdout().unwrap();
+        for (ind, board) in self.boards.iter().enumerate() {
+            for (c,x) in board.0.iter().enumerate() {
+                if c == self.head_positions[ind] {
+                    terminal.fg(term::color::RED).unwrap();
+                    print!("{} ", x);
+                    terminal.reset().unwrap();
+                } else {
+                    if *x as usize == 1 {
+                        terminal.fg(term::color::BRIGHT_BLUE).unwrap();
+                        terminal.attr(term::Attr::Bold).unwrap();
+                        print!("{} ", x);
+                        terminal.reset().unwrap();
+                    } else {
+                        print!("{} ", x);
+                    }
+                }
+            }
+            println!("");
+        }
+        println!("");
+    }
 }
 
-fn busy_beaver(
-    mut board: &mut Board, tw: &mut Typewriter, cards: &Cards) -> usize {
+fn busy_beaver(mut board: &mut Board, tw: &mut Typewriter,
+               cards: &Cards, mut stats: Stats) -> Option<Stats> {
     let mut current_card = cards.get_card(0);
-
     let mut rounds = 0;
-    println!("starting the busy beaver");
-    show_current_state(&board, &tw);
+    stats.update(&board, &tw);
     loop {
         let inst  = current_card.get_instruction(&tw, &board);
         let (state, dir, write) = (&inst.state, &inst.direction, &inst.write);
         tw.write(write, &mut board);
-        if !tw.move_head(dir) { println!("out of TAPE"); break }
-        show_current_state(&board, &tw);
+        if !tw.move_head(dir) { break }
+        stats.update(&board, &tw);
         match state {
             State::Card(i) => current_card = cards.get_card(*i),
-            State::Halt    => break,
+            State::Halt    => return Some(stats),
         }
         rounds += 1;
         if rounds > 100 { break }
     }
-    println!("busy beaver finished");
-    0
+    None
+}
+
+fn highest_score(stats: &Vec<Stats>) -> &Stats {
+    let mut current_leader = &stats[0];
+    for s in stats.iter() {
+        if s.score > current_leader.score {
+            current_leader = s;
+        }
+    }
+    current_leader
+}
+
+fn highest_action(stats: &Vec<Stats>) -> &Stats {
+    let mut current_leader = &stats[0];
+    for s in stats.iter() {
+        if s.action > current_leader.action {
+            current_leader = s;
+        }
+    }
+    current_leader
 }
 
 fn main() {
-
-    let i1 = Instructions::new(Symbol::One, Direction::Left, State::Card(0));
-    //let i1 = Instructions::new(Symbol::One, Direction::Right, State::Halt);
-    let i2 = Instructions::new(Symbol::Zero, Direction::Right, State::Card(0));
-    let card = Card::new([i1, i2]);
-    let cards = Cards::new(vec![card]);
-
     let m = Machines::generate(2);
+    
+    let mut stats_holder = vec![];
 
     for c in m.0.iter() {
-        let mut board = Board([0; BOARD_LENGTH]);
+        let mut board = Board(vec![0; BOARD_LENGTH]);
         let mut tw = Typewriter { head: BOARD_LENGTH/2 };
-        println!("{:?}", c);
+        let stats = Stats::init(c.clone());
 
-        busy_beaver(&mut board, &mut tw, &c);
+        if let Some(stats) = busy_beaver(&mut board, &mut tw, &c, stats) {
+            stats_holder.push(stats);
+        }
     }
 
-
-    //busy_beaver(board, tw, cards);
+    let winner_score = highest_score(&stats_holder);
+    let winner_action = highest_action(&stats_holder);
+ 
+    println!("winner_action  -  cards: {:?}  -  score: {:?}  -  action: {:?}",
+        winner_score.cards, winner_score.score, winner_score.action);
+    println!("{:?}", winner_score.show_state());
+    println!("");
+    println!("winner_score  -  cards: {:?}  -  score: {:?}  -  action: {:?}",
+        winner_action.cards, winner_action.score, winner_action.action);
+    println!("{:?}", winner_action.show_state());
 }
 
