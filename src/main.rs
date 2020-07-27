@@ -1,5 +1,7 @@
 extern crate term;
 
+use::std::env;
+
 const BOARD_LENGTH: usize = 25;
 
 #[derive(Debug, Clone)]
@@ -61,10 +63,10 @@ struct Machines(Vec<Cards>);
 #[derive(Debug)]
 /// Keep track of stats during a run of busy beaver
 struct Stats {
-    cards: Cards,
-    score: usize,
-    action: usize,
-    boards: Vec<Board>,
+    cards:          Cards,
+    score:          usize,
+    action:         usize,
+    boards:         Vec<Board>,
     head_positions: Vec<usize>,
 }
 
@@ -187,7 +189,7 @@ impl Machines {
 
     fn generate_all_possible_machines(cards: Vec<Card>,
                                       num_cards: usize) -> Vec<Cards> {
-        let mut res: Vec<Cards> = Vec::new();
+        let mut res: Vec<Cards>        = Vec::new();
         let mut card_holder: Vec<Card> = Vec::new();
         Self::combine_cards(&cards, num_cards-1, 0, 0,
                             &mut card_holder, &mut res);
@@ -257,10 +259,12 @@ impl Stats {
     }
 }
 
-fn busy_beaver(mut board: &mut Board, tw: &mut Typewriter,
-               cards: &Cards, mut stats: Stats) -> Option<Stats> {
+fn busy_beaver(cards: &Cards) -> Option<Stats> {
+    let mut board        = Board(vec![0; BOARD_LENGTH]);
+    let mut tw           = Typewriter { head: BOARD_LENGTH/2 };
+    let mut stats        = Stats::init(cards.clone());
     let mut current_card = cards.get_card(0);
-    let mut rounds = 0;
+    let mut rounds       = 0;
     stats.update(&board, &tw);
     loop {
         let inst  = current_card.get_instruction(&tw, &board);
@@ -298,17 +302,18 @@ fn highest_action(stats: &Vec<Stats>) -> &Stats {
     current_leader
 }
 
+//TODO: make symbols dynamic + comment all code
 fn main() {
-    let m = Machines::generate(2);
+    let args: Vec<String> = env::args().collect();
+
+    println!("{:?}", args);
+
+    let m = Machines::generate(args[args.len()-1].parse().unwrap());
     
     let mut stats_holder = vec![];
 
     for c in m.0.iter() {
-        let mut board = Board(vec![0; BOARD_LENGTH]);
-        let mut tw = Typewriter { head: BOARD_LENGTH/2 };
-        let stats = Stats::init(c.clone());
-
-        if let Some(stats) = busy_beaver(&mut board, &mut tw, &c, stats) {
+        if let Some(stats) = busy_beaver(&c) {
             stats_holder.push(stats);
         }
     }
@@ -318,10 +323,10 @@ fn main() {
  
     println!("winner_action  -  cards: {:?}  -  score: {:?}  -  action: {:?}",
         winner_score.cards, winner_score.score, winner_score.action);
-    println!("{:?}", winner_score.show_state());
+    winner_score.show_state();
     println!("");
     println!("winner_score  -  cards: {:?}  -  score: {:?}  -  action: {:?}",
         winner_action.cards, winner_action.score, winner_action.action);
-    println!("{:?}", winner_action.show_state());
+    winner_action.show_state();
 }
 
