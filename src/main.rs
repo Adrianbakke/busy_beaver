@@ -149,10 +149,12 @@ impl Machines {
         // constructs all possible cards
         let cards = Self::generate_all_possible_cards(inst, num_symbols);
 
-        // constructs all possible machines that contains the halt state
+        // calculates the number of machines created. NUmber is used to pre-allocate
+        // the needed memory to store them all.
         let num_allocate = 
             (num_symbols*2*(num_cards+1)).pow((num_cards+num_symbols) as u32);
 
+        // constructs all possible machines that contains the halt state
         println!("Starts creating machines");
         let machines =
             Self::generate_all_possible_machines(cards, num_cards,
