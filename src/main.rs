@@ -82,8 +82,8 @@ impl Card {
 
     /// fetch the instructions corresponding to the read symbol
     /// on the board.
-    pub fn get_instruction<'a>(
-        &'a self, tw: &Typewriter, board: &Board) -> &'a Instructions {
+    pub fn get_instruction<'a>(&'a self, tw: &Typewriter,
+                               board: &Board) -> &'a Instructions {
         match tw.read(board) {
             Symbol(i) => &self.0[i as usize],
         }
@@ -141,6 +141,7 @@ impl Typewriter {
 }
 
 impl Machines {
+    /// Generates all possible machines that contains the halt-state
     pub fn generate(num_cards: usize, num_symbols: usize) -> Self {
         // construct every possible set of instructions
         let inst = Self::generate_instructions(num_cards, num_symbols);
@@ -149,13 +150,13 @@ impl Machines {
         let cards = Self::generate_all_possible_cards(inst, num_symbols);
 
         // constructs all possible machines that contains the halt state
-        let num_configs = 
+        let num_allocate = 
             (num_symbols*2*(num_cards+1)).pow((num_cards+num_symbols) as u32);
 
         println!("Starts creating machines");
         let machines =
             Self::generate_all_possible_machines(cards, num_cards,
-                                                 num_configs);
+                                                 num_allocate);
 
         Self(machines)
     }
@@ -174,17 +175,17 @@ impl Machines {
 
     fn generate_all_possible_machines(cards: Vec<Card>,
                                       num_cards: usize,
-                                      num_configs: usize) -> Vec<Cards> {
-        let mut res: Vec<Vec<Card>>    = Vec::with_capacity(num_configs);
+                                      num_allocate: usize) -> Vec<Cards> {
+        let mut res: Vec<Vec<Card>>    = Vec::with_capacity(num_allocate);
         let mut card_holder: Vec<Card> = Vec::new();
         println!("memory allocated, proceeding...");
         generate_combinations(&cards, num_cards, 0, 0,
                               &mut card_holder, &mut res);
-        let res: Vec<Cards> =
-            res.into_iter().map(|x| Cards::new(x)).collect();
-        res.into_iter() .filter(|x| x.contains_halt_state()).collect()
+        let res: Vec<Cards> = res.into_iter()
+                                 .map(|x| Cards::new(x))
+                                 .collect();
+        res.into_iter().filter(|x| x.contains_halt_state()).collect()
     }
-
 
     fn generate_instructions(num_cards: usize,
                              num_symbols: usize) -> Vec<Instructions> {
@@ -224,6 +225,7 @@ impl Stats {
                boards: vec![], head_positions: vec![] }
     }
 
+    /// update all stats based on state of the board and typewriter
     pub fn update(&mut self, board: &Board, tw: &Typewriter) {
         self.score = board.0.iter().filter(|x| **x == 1)
                             .collect::<Vec<&u8>>().len();
@@ -232,6 +234,9 @@ impl Stats {
         self.head_positions.push(tw.head);
     }
 
+    /// shows the all the states the busy beaver went through.
+    /// All ones are printed in blue color, while the current position
+    /// of the head is printed in red.
     pub fn show_state(&self) {
         let mut terminal = term::stdout().unwrap();
         for (ind, board) in self.boards.iter().enumerate() {
@@ -257,25 +262,35 @@ impl Stats {
     }
 }
 
-fn generate_combinations<T: Clone>(input: &Vec<T>,
-                              max_depth: usize,
-                              mut ind: usize,
-                              r: usize,
-                              mut input_holder: &mut Vec<T>,
-                              mut res: &mut Vec<Vec<T>>) {
+/// generates all possible combinations of the elements in the input vec with 
+/// a length of max_depth
+/// # Example
+/// input -> vec [1,2], max_depth -> 2
+/// gives res -> [1,1], [1,2], [2,1]. [2,2] 
+fn generate_combinations<T: Clone>(input: &Vec<T>, max_depth: usize,
+                                   mut ind: usize, r: usize,
+                                   mut input_holder: &mut Vec<T>,
+                                   mut res: &mut Vec<Vec<T>>) {
     while ind < input.len() {
         input_holder.push(input[ind].clone());
+
+        // calls itself recursively until the max-depth is reached
         if r < max_depth-1 {
-            generate_combinations(
-                input, max_depth, 0, r+1, &mut input_holder, &mut res);
+            generate_combinations(input, max_depth, 0, r+1,
+                                  &mut input_holder, &mut res);
         } else {
             res.push(input_holder.clone());
         }
         input_holder.pop();
         ind += 1;
-     }
+    }
 }
 
+/// Runs the busy beavers, you feed it the card with instructions to follow
+/// and this functions runs them. Busy beaver will break if we're out of tape
+/// or if (at least for now (might be changed later if feel for it))
+/// we go over 100 iterations/rounds. If it happens that we run into the halt-
+/// state, then we return the stats.
 fn busy_beaver(cards: &Cards) -> Option<Stats> {
     let mut board        = Board(vec![0; BOARD_LENGTH]);
     let mut tw           = Typewriter { head: BOARD_LENGTH/2 };
@@ -287,8 +302,12 @@ fn busy_beaver(cards: &Cards) -> Option<Stats> {
         let inst  = current_card.get_instruction(&tw, &board);
         let (state, dir, write) = (&inst.state, &inst.direction, &inst.write);
         tw.write(write, &mut board);
+
+        // Moves the head if possible. If we're out of space -> break
         if !tw.move_head(dir) { break }
         stats.update(&board, &tw);
+
+        // Change state
         match state {
             State::Card(i) => current_card = cards.get_card(*i),
             State::Halt    => return Some(stats),
@@ -328,7 +347,7 @@ fn main() {
     let arg1 = args[args.len()-2].parse().unwrap();
     let arg2 = args[args.len()-1].parse().unwrap();
 
-    let m = Machines::generate(arg1, arg2);
+    let machines = Machines::generate(arg1, arg2).0;
 
     println!("Machines generated, moving on to the BUSY BEAVER!");
     
@@ -337,8 +356,8 @@ fn main() {
     let mut best_action = 0;
     let mut best_action_holder = Stats::default();
 
-    for (x,c) in m.0.iter().enumerate() {
-        if let Some(stats) = busy_beaver(&c) {
+    for m in machines.iter() {
+        if let Some(stats) = busy_beaver(&m) {
             if stats.action > best_action {
                 best_action_holder = stats.clone();
                 best_action = stats.action;
