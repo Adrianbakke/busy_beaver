@@ -3,13 +3,13 @@ extern crate term;
 use::std::env;
 
 //TODO: make BOARD_LENGTH dynamic
-const BOARD_LENGTH: usize = 25;
+const TAPE_LENGTH: usize = 25;
 
 #[derive(Debug, Clone)]
-/// Defines the board/tape on which the busy beaver game will unfold
-/// The board in theory can be of inifinte length. In the real world
+/// Defines the tape/tape on which the busy beaver game will unfold
+/// The tape in theory can be of inifinte length. In the real world
 /// we are limited by RAM.
-struct Board(Vec<u8>);
+struct Tape(Vec<u8>);
 
 #[derive(Debug, Clone, Copy)]
 /// Directions the 'typewriter' (tw) can move.
@@ -40,7 +40,7 @@ struct Card(Vec<Instructions>);
 #[derive(Debug, Clone, Copy)]
 /// Holds the instruction the tw must follow
 struct Instructions {
-    /// Symbol to be written on the board
+    /// Symbol to be written on the tape
     write: Symbol,
 
     /// The direction the tw moves after write
@@ -65,7 +65,7 @@ struct Stats {
     cards:          Cards,
     score:          usize,
     action:         usize,
-    boards:         Vec<Board>,
+    tapes:          Vec<Tape>,
     head_positions: Vec<usize>,
 }
 
@@ -81,10 +81,10 @@ impl Card {
     }
 
     /// fetch the instructions corresponding to the read symbol
-    /// on the board.
+    /// on the tape.
     pub fn get_instruction<'a>(&'a self, tw: &Typewriter,
-                               board: &Board) -> &'a Instructions {
-        match tw.read(board) {
+                               tape: &Tape) -> &'a Instructions {
+        match tw.read(tape) {
             Symbol(i) => &self.0[i as usize],
         }
     }
@@ -116,7 +116,7 @@ impl Cards {
 impl Typewriter {
     /// Move the head of the typewriter one step ether left or right.
     pub fn move_head(&mut self, dir: &Direction) ->  bool {
-        if !(self.head > 0 && self.head < (BOARD_LENGTH-1)) {
+        if !(self.head > 0 && self.head < (TAPE_LENGTH-1)) {
             return false
         }
 
@@ -127,16 +127,16 @@ impl Typewriter {
         true
     }
 
-    /// Writes the new symbol onto the board.
-    pub fn write(&self, sym: &Symbol, board: &mut Board) {
+    /// Writes the new symbol onto the tape.
+    pub fn write(&self, sym: &Symbol, tape: &mut Tape) {
         match sym {
-            Symbol(i) => board.0[self.head] = *i,
+            Symbol(i) => tape.0[self.head] = *i,
         }
     }
 
-    /// Reads symbol of the board of which the tw head is hovering.
-    pub fn read(&self, board: &Board) -> Symbol {
-        Symbol(board.0[self.head])
+    /// Reads symbol of the tape of which the tw head is hovering.
+    pub fn read(&self, tape: &Tape) -> Symbol {
+        Symbol(tape.0[self.head])
     }
 }
 
@@ -217,22 +217,22 @@ impl Machines {
 impl Stats {
     pub fn init(cards: Cards) -> Self {
         Self { cards, action: 0, score: 0,
-               boards: vec![], head_positions: vec![] }
+               tapes: vec![], head_positions: vec![] }
     }
     
     pub fn default() -> Self {
         let inst = Instructions::new(Symbol(0), Direction::Left, State::Halt);
         let card = Card::new(vec![inst]);
         Self { cards: Cards::new(vec![card]), action: 0, score: 0,
-               boards: vec![], head_positions: vec![] }
+               tapes: vec![], head_positions: vec![] }
     }
 
-    /// update all stats based on state of the board and typewriter
-    pub fn update(&mut self, board: &Board, tw: &Typewriter) {
-        self.score = board.0.iter().filter(|x| **x == 1)
+    /// update all stats based on state of the tape and typewriter
+    pub fn update(&mut self, tape: &Tape, tw: &Typewriter) {
+        self.score = tape.0.iter().filter(|x| **x == 1)
                             .collect::<Vec<&u8>>().len();
-        self.boards.push(board.clone());
-        self.action = self.boards.len()-1;
+        self.tapes.push(tape.clone());
+        self.action = self.tapes.len()-1;
         self.head_positions.push(tw.head);
     }
 
@@ -241,8 +241,8 @@ impl Stats {
     /// of the head is printed in red.
     pub fn show_state(&self) {
         let mut terminal = term::stdout().unwrap();
-        for (ind, board) in self.boards.iter().enumerate() {
-            for (c,x) in board.0.iter().enumerate() {
+        for (ind, tape) in self.tapes.iter().enumerate() {
+            for (c,x) in tape.0.iter().enumerate() {
                 if c == self.head_positions[ind] {
                     terminal.fg(term::color::RED).unwrap();
                     print!("{} ", x);
@@ -294,20 +294,20 @@ fn generate_combinations<T: Clone>(input: &Vec<T>, max_depth: usize,
 /// we go over 100 iterations/rounds. If it happens that we run into the halt-
 /// state, then we return the stats.
 fn busy_beaver(cards: &Cards) -> Option<Stats> {
-    let mut board        = Board(vec![0; BOARD_LENGTH]);
-    let mut tw           = Typewriter { head: BOARD_LENGTH/2 };
+    let mut tape        = Tape(vec![0; TAPE_LENGTH]);
+    let mut tw           = Typewriter { head: TAPE_LENGTH/2 };
     let mut stats        = Stats::init(cards.clone());
     let mut current_card = cards.get_card(0);
     let mut rounds       = 0;
-    stats.update(&board, &tw);
+    stats.update(&tape, &tw);
     loop {
-        let inst  = current_card.get_instruction(&tw, &board);
+        let inst  = current_card.get_instruction(&tw, &tape);
         let (state, dir, write) = (&inst.state, &inst.direction, &inst.write);
-        tw.write(write, &mut board);
+        tw.write(write, &mut tape);
 
         // Moves the head if possible. If we're out of space -> break
         if !tw.move_head(dir) { break }
-        stats.update(&board, &tw);
+        stats.update(&tape, &tw);
 
         // Change state
         match state {
