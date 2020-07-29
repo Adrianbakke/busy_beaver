@@ -372,8 +372,9 @@ fn main() {
         }
     }
     
-    println!("winner_score  - score: {:?}  -  action: {:?}",
-        best_score_holder.score, best_score_holder.action);
+    println!("winner_score  - score: {:?}  -  action: {:?}\n cards - {:?}",
+        best_score_holder.score, best_score_holder.action,
+        best_score_holder.cards);
     best_score_holder.show_state();
     /*
     let winner_score = highest_score(&stats_holder);
