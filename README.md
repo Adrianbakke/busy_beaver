@@ -5,7 +5,7 @@ want to run it?
 
 in terminal:
 
--> cargo run --release <number of states> <number of symbols>
+-> cargo run --release '<number of states>' '<number of symbols>'
   
 # examples
 
