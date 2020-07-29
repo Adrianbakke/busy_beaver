@@ -2,9 +2,6 @@ extern crate term;
 
 use::std::env;
 
-//TODO: make BOARD_LENGTH dynamic
-const TAPE_LENGTH: usize = 25;
-
 #[derive(Debug, Clone)]
 /// Defines the tape/tape on which the busy beaver game will unfold
 /// The tape in theory can be of inifinte length. In the real world
@@ -125,16 +122,15 @@ impl Cards {
 
 impl Typewriter {
     /// Move the head of the typewriter one step ether left or right.
-    pub fn move_head(&mut self, dir: &Direction) ->  bool {
-        if !(self.head > 0 && self.head < (TAPE_LENGTH-1)) {
-            return false
-        }
-
+    pub fn move_head(&mut self, dir: &Direction, tape: &mut Tape) {
         match dir {
             Direction::Left  => self.head = self.head - 1,
             Direction::Right => self.head = self.head + 1,
         }
-        true
+
+        if self.head < 0 || self.head > (tape.0.len()-1) {
+            tape.extend(self);
+        }
     }
 
     /// Writes the new symbol onto the tape.
@@ -336,8 +332,7 @@ fn busy_beaver(cards: &Cards) -> Option<Stats> {
         tw.write(write, &mut tape);
 
         // Moves the head if possible. If we're out of space -> break
-        tape.extend(&mut tw);
-        if !tw.move_head(dir) { break }
+        tw.move_head(dir, &mut tape);
         stats.update(&tape, &tw);
 
         // Change state
@@ -403,8 +398,9 @@ fn main() {
         }
     }
     
-    println!("winner_score  - score: {:?}  -  action: {:?}",
-        best_score_holder.score, best_score_holder.action);
+    println!("winner_score  - score: {:?}  -  action: {:?}\n cards - {:?}",
+        best_score_holder.score, best_score_holder.action,
+        best_score_holder.cards);
     best_score_holder.show_state();
     /*
     let winner_score = highest_score(&stats_holder);
