@@ -63,7 +63,7 @@ struct Stats {
     score:          usize,
     action:         usize,
     tapes:          Vec<Tape>,
-    head_positions: Vec<i64>,
+    head_positions: Vec<isize>,
 }
 
 impl Tape {
@@ -123,13 +123,13 @@ impl Cards {
 impl Typewriter {
     /// Move the head of the typewriter one step ether left or right.
     pub fn move_head(&mut self, dir: &Direction, tape: &mut Tape) {
+        if self.head <= 0 || self.head >= (tape.0.len()-1) {
+            tape.extend(self);
+        }
+
         match dir {
             Direction::Left  => self.head = self.head - 1,
             Direction::Right => self.head = self.head + 1,
-        }
-
-        if self.head < 0 || self.head > (tape.0.len()-1) {
-            tape.extend(self);
         }
     }
 
@@ -239,7 +239,10 @@ impl Stats {
                             .collect::<Vec<&u8>>().len();
         self.tapes.push(tape.clone());
         self.action = self.tapes.len()-1;
-        self.head_positions.push((tw.head-tape.0.len()/2) as i64);
+
+        let head_pos = tw.head as isize;
+        let shift    = (tape.0.len()/2) as isize;
+        self.head_positions.push(head_pos-shift);
     }
 
     /// shows the all the states the busy beaver went through.
@@ -255,11 +258,11 @@ impl Stats {
         // Proceed to insert values at positions relative to the center of
         // the tape..
         let mut formatted_tapes = vec![];
-        let mut head_positions = self.head_positions.clone() as Vec<i64>;
+        let mut head_positions = self.head_positions.clone() as Vec<isize>;
         for (ind, tape) in self.tapes.iter().enumerate() {
             let mut tmp = vec![0u8; tape_length];
             let start = mid-(tape.0.len()/2);
-            head_positions[ind] = (mid as i64)+head_positions[ind];
+            head_positions[ind] = (mid as isize)+head_positions[ind];
             for (c,t) in tape.0.iter().enumerate() {
                 tmp[start+c] = *t;
             }
