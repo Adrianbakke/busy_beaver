@@ -34,7 +34,7 @@ enum State {
 struct Cards(Vec<Card>);
 
 #[derive(Debug, Clone)]
-/// Defines a card holding instructions.
+/// Holds the instructions of the different states.
 struct Card(Vec<Instructions>);
 
 #[derive(Debug, Clone, Copy)]
@@ -50,7 +50,7 @@ struct Instructions {
     state: State,
 }
 
-/// Typewriter holds and controls the posiston of the moving head 
+/// Typewriter holds and controls the position of the moving head 
 struct Typewriter {
     head: usize,
 }
@@ -60,13 +60,23 @@ struct Typewriter {
 struct Machines(Vec<Cards>);
 
 #[derive(Debug, Clone)]
-/// Keep track of stats during a run of busy beaver
+/// Keep track of stats during a run of the Busy Beaver
 struct Stats {
     cards:          Cards,
     score:          usize,
     action:         usize,
     tapes:          Vec<Tape>,
-    head_positions: Vec<usize>,
+    head_positions: Vec<i64>,
+}
+
+impl Tape {
+    /// extends the tape by putting a zero at the beginning and end of the
+    /// current tape
+    pub fn extend(&mut self, tw: &mut Typewriter) {
+        tw.head = tw.head + 1;
+        self.0.insert(0,0);
+        self.0.push(0);
+    }
 }
 
 impl Instructions {
@@ -233,7 +243,7 @@ impl Stats {
                             .collect::<Vec<&u8>>().len();
         self.tapes.push(tape.clone());
         self.action = self.tapes.len()-1;
-        self.head_positions.push(tw.head);
+        self.head_positions.push((tw.head-tape.0.len()/2) as i64);
     }
 
     /// shows the all the states the busy beaver went through.
@@ -241,9 +251,29 @@ impl Stats {
     /// of the head is printed in red.
     pub fn show_state(&self) {
         let mut terminal = term::stdout().unwrap();
+
+        let tape_length = self.tapes[self.tapes.len()-1].0.len();
+        let mid = tape_length/2;
+
+        // Make all taped the same length as the final tape by padding zeroes.
+        // Proceed to insert values at positions relative to the center of
+        // the tape..
+        let mut formatted_tapes = vec![];
+        let mut head_positions = self.head_positions.clone() as Vec<i64>;
         for (ind, tape) in self.tapes.iter().enumerate() {
-            for (c,x) in tape.0.iter().enumerate() {
-                if c == self.head_positions[ind] {
+            let mut tmp = vec![0u8; tape_length];
+            let start = mid-(tape.0.len()/2);
+            head_positions[ind] = (mid as i64)+head_positions[ind];
+            for (c,t) in tape.0.iter().enumerate() {
+                tmp[start+c] = *t;
+            }
+            formatted_tapes.push(tmp);
+        }
+
+        // prints the tapes in order and with color
+        for (ind, tape) in formatted_tapes.iter().enumerate() {
+            for (c,x) in tape.iter().enumerate() {
+                if c == (head_positions[ind] as usize) {
                     terminal.fg(term::color::RED).unwrap();
                     print!("{} ", x);
                     terminal.reset().unwrap();
@@ -294,18 +324,19 @@ fn generate_combinations<T: Clone>(input: &Vec<T>, max_depth: usize,
 /// we go over 100 iterations/rounds. If it happens that we run into the halt-
 /// state, then we return the stats.
 fn busy_beaver(cards: &Cards) -> Option<Stats> {
-    let mut tape        = Tape(vec![0; TAPE_LENGTH]);
-    let mut tw           = Typewriter { head: TAPE_LENGTH/2 };
+    let mut tape         = Tape(vec![0]);
+    let mut tw           = Typewriter { head: 0 };
     let mut stats        = Stats::init(cards.clone());
     let mut current_card = cards.get_card(0);
     let mut rounds       = 0;
     stats.update(&tape, &tw);
     loop {
-        let inst  = current_card.get_instruction(&tw, &tape);
+        let inst = current_card.get_instruction(&tw, &tape);
         let (state, dir, write) = (&inst.state, &inst.direction, &inst.write);
         tw.write(write, &mut tape);
 
         // Moves the head if possible. If we're out of space -> break
+        tape.extend(&mut tw);
         if !tw.move_head(dir) { break }
         stats.update(&tape, &tw);
 
